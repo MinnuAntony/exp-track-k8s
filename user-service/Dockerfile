@@ -7,7 +7,7 @@ WORKDIR /app
 # Install dependencies in a single layer & clean cache
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
-    && python -m compileall .  # optional: precompile python files
+    && python -m compileall .  
 
 # Copy application code
 COPY . .
