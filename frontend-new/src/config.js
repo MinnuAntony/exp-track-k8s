@@ -1,2 +1,2 @@
-export const EXPENSES_URL = 'http://13.222.165.100:8080/expenses';
+export const EXPENSES_URL = 'http://13.218.44.133:8080/expenses';
 

@@ -22,7 +22,7 @@ const Expenses = ({ userId }) => {
 
   const fetchExpenses = async () => {
     try {
-      const response = await axios.get(`http://13.222.165.100:8080/expenses/${effectiveUserId}`);
+      const response = await axios.get(`http://13.218.44.133:8080/expenses/${effectiveUserId}`);
       setExpenses(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       setExpenses([]); // fallback to empty array
@@ -44,7 +44,7 @@ const Expenses = ({ userId }) => {
     };
 
     try {
-      await axios.post('http://13.222.165.100:8080/expenses', expenseData);
+      await axios.post('http://13.218.44.133:8080/expenses', expenseData);
       setNewExpense({ amount: '', category: '' });
       fetchExpenses(); // Refresh the list
       setMessage('Expense added successfully!');
