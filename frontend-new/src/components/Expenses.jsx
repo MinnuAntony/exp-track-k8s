@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { EXPENSES_URL } from '../config.js';
 
 const Expenses = ({ userId }) => {
-  console.log("Expenses loaded with userId:", userId);
-  
   const [expenses, setExpenses] = useState([]);
   const [newExpense, setNewExpense] = useState({ amount: '', category: '' });
   const [message, setMessage] = useState('');
@@ -22,10 +21,10 @@ const Expenses = ({ userId }) => {
 
   const fetchExpenses = async () => {
     try {
-      const response = await axios.get(`http://3.87.182.69:8080/expenses/${effectiveUserId}`);
+      const response = await axios.get(`${EXPENSES_URL}/${effectiveUserId}`);
       setExpenses(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      setExpenses([]); // fallback to empty array
+      setExpenses([]);
       setMessage("Error fetching expenses.");
     }
   };
@@ -38,13 +37,13 @@ const Expenses = ({ userId }) => {
     }
 
     const expenseData = {
-      user_id: effectiveUserId, // Match backend
+      user_id: effectiveUserId,
       category: newExpense.category,
       amount: parseFloat(newExpense.amount),
     };
 
     try {
-      await axios.post('http://3.87.182.69:8080/expenses', expenseData);
+      await axios.post(EXPENSES_URL, expenseData);
       setNewExpense({ amount: '', category: '' });
       fetchExpenses(); // Refresh the list
       setMessage('Expense added successfully!');
@@ -53,14 +52,12 @@ const Expenses = ({ userId }) => {
     }
   };
 
-  // Calculate total amount dynamically
   const totalAmount = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
   return (
     <div className="expenses-container">
       <h2>Your Expenses</h2>
 
-      {/* Total expense summary */}
       <h3>Total Spent: ${totalAmount.toFixed(2)}</h3>
 
       <form onSubmit={handleAddExpense} className="add-expense-form">
@@ -92,6 +89,7 @@ const Expenses = ({ userId }) => {
       ) : (
         <p>No expenses found. Add one above!</p>
       )}
+
       {message && <p>{message}</p>}
     </div>
   );
