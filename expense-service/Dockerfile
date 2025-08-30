@@ -1,7 +1,7 @@
 # --- Build Stage ---
 FROM golang:1.21-alpine AS builder
 
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git 
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o expense-service main.g
 
 # --- Run Stage ---
 FROM scratch
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
 COPY --from=builder /app/expense-service /expense-service
 
 USER 1000:1000
