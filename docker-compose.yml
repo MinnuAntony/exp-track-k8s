@@ -16,17 +16,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./db-init:/docker-entrypoint-initdb.d
 
-
-  # The Java Spring Boot analytics service
-  analytics-service:
-    build: ./analytics-service
-    ports:
-      - "8090:8090"
-    container_name: analytics-service
-    depends_on:
-      - mysql-db
-
-  # The Go expense service
+# The Go expense service
   expense-service:
     build: ./expense-service
     ports:
@@ -39,9 +29,8 @@ services:
       DB_NAME: micro_db
     depends_on:
       - mysql-db
-      - analytics-service
-
-  # The Python FastAPI user service
+     
+# The Python FastAPI user service
   user-service:
     build: ./user-service
     ports:
@@ -67,7 +56,7 @@ services:
     depends_on:
       - user-service
       - expense-service
-      - analytics-service
+     
 
 volumes:
   mysql_data:
