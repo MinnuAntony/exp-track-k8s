@@ -1,22 +1,20 @@
 version: '3.8'
 
 services:
-  # MySQL database service
   mysql-db:
     image: mysql:8.1
     container_name: mysql-db
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: micro_db
-      MYSQL_USER: micro_user
-      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./db-init:/docker-entrypoint-initdb.d
 
-# The Go expense service
   expense-service:
     build: ./expense-service
     ports:
@@ -24,13 +22,12 @@ services:
     container_name: expense-service
     environment:
       DB_HOST: mysql-db
-      DB_USER: micro_user
-      DB_PASSWORD: secret
-      DB_NAME: micro_db
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_NAME: ${MYSQL_DATABASE}
     depends_on:
       - mysql-db
      
-# The Python FastAPI user service
   user-service:
     build: ./user-service
     ports:
@@ -38,14 +35,13 @@ services:
     container_name: user-service
     environment:
       DB_HOST: mysql-db
-      DB_USER: micro_user
-      DB_PASSWORD: secret
-      DB_NAME: micro_db
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_NAME: ${MYSQL_DATABASE}
     depends_on:
       - mysql-db
       - expense-service
 
-  # The React frontend service
   frontend:
     build:
       context: ./frontend-new
@@ -56,7 +52,6 @@ services:
     depends_on:
       - user-service
       - expense-service
-     
 
 volumes:
   mysql_data:
