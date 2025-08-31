@@ -1,2 +1,2 @@
 .env
-
+k8s/mysql-secret.yaml

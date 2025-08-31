@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-db
+spec:
+  selector:
+    matchLabels:
+      app: mysql-db
+  serviceName: mysql-db
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mysql-db
+    spec:
+      containers:
+        - name: mysql-db
+          image: mysql:8.1
+          ports:
+            - containerPort: 3306
+          envFrom:
+            - secretRef:
+                name: mysql-secret
+          volumeMounts:
+            - name: mysql-persistent-storage
+              mountPath: /var/lib/mysql
+            - name: mysql-initdb
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: mysql-initdb
+          configMap:
+            name: mysql-initdb-config
+        - name: mysql-persistent-storage
+          persistentVolumeClaim:
+            claimName: mysql-pvc   # <-- updated to reference PVC
+
