@@ -19,11 +19,27 @@ spec:
             - containerPort: 80
           resources:
              requests:
-               cpu: 100m
-               memory: 100Mi
+               cpu: 50m  #100
+               memory: 64Mi   #100
              limits:
                cpu: 500m
                memory: 200Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
 ---
 apiVersion: v1
 kind: Service
