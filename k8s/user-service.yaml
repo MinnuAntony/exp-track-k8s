@@ -17,6 +17,14 @@ spec:
           image: minnuantony/user-service:latest   # <-- change image name
           ports:
             - containerPort: 5000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi      #128Mi 
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
           env:
             - name: DB_HOST
               value: mysql-db
