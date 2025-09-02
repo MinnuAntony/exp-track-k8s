@@ -24,7 +24,20 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
-
+          livenessProbe:
+            httpGet:
+              path: /users
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /users
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DB_HOST
               value: mysql-db
@@ -55,4 +68,3 @@ spec:
     - port: 5000
       targetPort: 5000
   type: ClusterIP
-
