@@ -1,0 +1,52 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow from Ingress Controller
+  - from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+    ports:
+      - protocol: TCP
+        port: 80   # or whatever port your frontend pod listens on
+  egress:
+  # Frontend → user-service
+  - to:
+      - podSelector:
+          matchLabels:
+            app: user-service
+    ports:
+      - protocol: TCP
+        port: 5000
+  # Frontend → expense-service
+  - to:
+      - podSelector:
+          matchLabels:
+            app: expense-service
+    ports:
+      - protocol: TCP
+        port: 8080
+  # Frontend → DNS (CoreDNS)
+  - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+    ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+
