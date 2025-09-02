@@ -1,0 +1,63 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-expense-service
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: expense-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Ingress from frontend & user-service
+  - from:
+      - podSelector:
+          matchLabels:
+            app: frontend
+      - podSelector:
+          matchLabels:
+            app: user-service
+    ports:
+      - protocol: TCP
+        port: 8080
+  # Ingress from Ingress controller (external traffic)
+  - from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+    ports:
+      - protocol: TCP
+        port: 8080
+  egress:
+  # Expense → MySQL
+  - to:
+      - podSelector:
+          matchLabels:
+            app: mysql-db
+    ports:
+      - protocol: TCP
+        port: 3306
+  # Expense → user-service
+  - to:
+      - podSelector:
+          matchLabels:
+            app: user-service
+    ports:
+      - protocol: TCP
+        port: 5000
+  # Expense → DNS
+  - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+    ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+
