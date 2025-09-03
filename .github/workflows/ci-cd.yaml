@@ -1,13 +1,10 @@
 name: CI-CD to Kubernetes
-
 on:
   push:
     branches:
       - main
   workflow_dispatch:
-
 jobs:
-
   # ---------------- JOB 1: BUILD & PUSH IMAGES ----------------
   build:
     runs-on: self-hosted
@@ -18,17 +15,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
       - name: Log in to DockerHub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: Get Git SHA
         id: sha
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
       - name: Build and Push Expense Service Image
         id: expense
         run: |
@@ -37,7 +31,6 @@ jobs:
           docker build -t "$IMAGE" ./expense-service
           docker push "$IMAGE"
           echo "expense_image=$IMAGE" >> $GITHUB_OUTPUT
-
       - name: Build and Push User Service Image
         id: user
         run: |
@@ -46,7 +39,6 @@ jobs:
           docker build -t "$IMAGE" ./user-service
           docker push "$IMAGE"
           echo "user_image=$IMAGE" >> $GITHUB_OUTPUT
-
       - name: Build and Push Frontend Image
         id: frontend
         run: |
@@ -63,7 +55,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
       # ---------------- INGRESS CONTROLLER ----------------
       - name: Install NGINX Ingress Controller
         run: |
@@ -71,13 +62,11 @@ jobs:
           kubectl wait --namespace ingress-nginx \
             --for=condition=available deployment ingress-nginx-controller \
             --timeout=180s
-
       - name: Patch Ingress Controller Service to NodePort
         run: |
           kubectl get svc ingress-nginx-controller -n ingress-nginx -o yaml \
             | sed 's/type: LoadBalancer/type: NodePort/' \
             | kubectl apply -f -
-
       # ---------------- METRICS SERVER ----------------
       - name: Install Metrics Server
         run: |
@@ -85,13 +74,11 @@ jobs:
           kubectl wait --namespace kube-system \
             --for=condition=available deployment metrics-server \
             --timeout=120s
-
       - name: Patch Metrics Server
         run: |
           kubectl -n kube-system patch deployment metrics-server --type='json' \
             -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]' || true
           kubectl -n kube-system rollout status deployment/metrics-server --timeout=120s || true
-
       # ---------------- MYSQL SECRET ----------------
       - name: Create MySQL Secret
         run: |
@@ -101,14 +88,40 @@ jobs:
             --from-literal=MYSQL_USER="${{ secrets.MYSQL_USER }}" \
             --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
             --from-literal=MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}"
-
       # ---------------- UPDATE DEPLOYMENT IMAGES ----------------
       - name: Update Deployment Images
         run: |
-          kubectl set image deployment/expense-service expense-service="${{ needs.build.outputs.expense_image }}"
-          kubectl set image deployment/user-service user-service="${{ needs.build.outputs.user_image }}"
-          kubectl set image deployment/frontend frontend="${{ needs.build.outputs.frontend_image }}"
-
+          echo "Updating deployments with new images..."
+          # Use shell variables to ensure correct interpolation
+          EXPENSE_IMAGE="${{ needs.build.outputs.expense_image }}"
+          USER_IMAGE="${{ needs.build.outputs.user_image }}"
+          FRONTEND_IMAGE="${{ needs.build.outputs.frontend_image }}"
+          
+          echo "Expense Service Image: $EXPENSE_IMAGE"
+          echo "User Service Image: $USER_IMAGE"
+          echo "Frontend Image: $FRONTEND_IMAGE"
+          
+          # Check if variables are empty before running kubectl commands
+          if [ -n "$EXPENSE_IMAGE" ]; then
+            kubectl set image deployment/expense-service expense-service="$EXPENSE_IMAGE"
+          else
+            echo "Error: Expense Service image name is empty. Skipping deployment."
+            exit 1
+          fi
+          
+          if [ -n "$USER_IMAGE" ]; then
+            kubectl set image deployment/user-service user-service="$USER_IMAGE"
+          else
+            echo "Error: User Service image name is empty. Skipping deployment."
+            exit 1
+          fi
+          
+          if [ -n "$FRONTEND_IMAGE" ]; then
+            kubectl set image deployment/frontend frontend="$FRONTEND_IMAGE"
+          else
+            echo "Error: Frontend image name is empty. Skipping deployment."
+            exit 1
+          fi
       # ---------------- APPLY OTHER MANIFESTS ----------------
       - name: Apply Remaining Manifests
         run: |
@@ -120,7 +133,6 @@ jobs:
           kubectl apply -R -f k8s/hpa/
           kubectl apply -f k8s/ingress.yaml
           kubectl apply -R -f k8s/network_policies/
-
       # ---------------- VERIFY ----------------
       - name: Verify Deployment
         run: |
