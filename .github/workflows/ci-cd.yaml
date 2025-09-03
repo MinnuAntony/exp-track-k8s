@@ -11,6 +11,10 @@ jobs:
   # ---------------- JOB 1: BUILD & PUSH IMAGES ----------------
   build:
     runs-on: self-hosted
+    outputs:
+      expense_image: ${{ steps.expense.outputs.image }}
+      user_image: ${{ steps.user.outputs.image }}
+      frontend_image: ${{ steps.frontend.outputs.image }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -21,36 +25,27 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build & Push Expense Service Image
+      - name: Build and Push Expense Service Image
+        id: expense
         run: |
-          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/expense-service:$SHORT_SHA"
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/expense-service:latest
           docker build -t $IMAGE ./expense-service
           docker push $IMAGE
-          echo "EXPENSE_IMAGE=$IMAGE" >> $GITHUB_ENV
-
-      - name: Build & Push User Service Image
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+      - name: Build and Push User Service Image
+        id: user
         run: |
-          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/user-service:$SHORT_SHA"
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/user-service:latest
           docker build -t $IMAGE ./user-service
           docker push $IMAGE
-          echo "USER_IMAGE=$IMAGE" >> $GITHUB_ENV
-
-      - name: Build & Push Frontend Image
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+      - name: Build and Push Frontend Image
+        id: frontend
         run: |
-          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/frontend:$SHORT_SHA"
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/frontend-new:latest
           docker build -t $IMAGE ./frontend-new
           docker push $IMAGE
-          echo "FRONTEND_IMAGE=$IMAGE" >> $GITHUB_ENV
-
-      - name: Debug - Print Built Images
-        run: |
-          echo "Expense Image: $EXPENSE_IMAGE"
-          echo "User Image: $USER_IMAGE"
-          echo "Frontend Image: $FRONTEND_IMAGE"
-
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
   # ---------------- JOB 2: DEPLOY TO KUBERNETES ----------------
   deploy:
     runs-on: self-hosted
@@ -71,7 +66,6 @@ jobs:
           kubectl get svc ingress-nginx-controller -n ingress-nginx -o yaml \
             | sed 's/type: LoadBalancer/type: NodePort/' \
             | kubectl apply -f -
-
       # ---------------- METRICS SERVER ----------------
       - name: Install Metrics Server
         run: |
@@ -84,7 +78,6 @@ jobs:
           kubectl -n kube-system patch deployment metrics-server --type='json' \
             -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]' || true
           kubectl -n kube-system rollout status deployment/metrics-server --timeout=120s || true
-
       # ---------------- MYSQL SECRET ----------------
       - name: Create MySQL Secret
         run: |
@@ -94,7 +87,6 @@ jobs:
             --from-literal=MYSQL_USER="${{ secrets.MYSQL_USER }}" \
             --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
             --from-literal=MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}"
-
       # ---------------- APPLY MANIFESTS ----------------
       - name: Deploy to Kubernetes
         run: |
@@ -109,17 +101,10 @@ jobs:
           kubectl apply -R -f k8s/hpa/
           kubectl apply -f k8s/ingress.yaml
           kubectl apply -R -f k8s/network_policies/
-
-      # ---------------- UPDATE DEPLOYMENTS WITH SHA IMAGES ----------------
-      - name: Update Deployments with SHA-tagged Images
-        run: |
-          kubectl set image deployment/expense-service expense-service=$EXPENSE_IMAGE
-          kubectl set image deployment/user-service user-service=$USER_IMAGE
-          kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE
-          kubectl rollout status deployment/expense-service
-          kubectl rollout status deployment/user-service
-          kubectl rollout status deployment/frontend
-
+          # --- Force redeploy app pods to pull latest images ---
+          kubectl rollout restart deployment expense-service
+          kubectl rollout restart deployment user-service
+          kubectl rollout restart deployment frontend
       # ---------------- VERIFY ----------------
       - name: Verify Deployment
         run: |
