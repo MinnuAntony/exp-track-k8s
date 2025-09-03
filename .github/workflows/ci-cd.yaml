@@ -25,27 +25,39 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and Push Expense Service Image
+      - name: Build & Push Expense Service Image
         id: expense
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/expense-service:latest
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+          IMAGE="$DOCKER_USERNAME/expense-service:$SHORT_SHA"
           docker build -t $IMAGE ./expense-service
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
-      - name: Build and Push User Service Image
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+
+      - name: Build & Push User Service Image
         id: user
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/user-service:latest
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+          IMAGE="$DOCKER_USERNAME/user-service:$SHORT_SHA"
           docker build -t $IMAGE ./user-service
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
-      - name: Build and Push Frontend Image
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+
+      - name: Build & Push Frontend Image
         id: frontend
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/frontend-new:latest
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+          IMAGE="$DOCKER_USERNAME/frontend-new:$SHORT_SHA"
           docker build -t $IMAGE ./frontend-new
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+
   # ---------------- JOB 2: DEPLOY TO KUBERNETES ----------------
   deploy:
     runs-on: self-hosted
@@ -61,11 +73,13 @@ jobs:
           kubectl wait --namespace ingress-nginx \
             --for=condition=available deployment ingress-nginx-controller \
             --timeout=180s
+
       - name: Patch Ingress Controller Service to NodePort
         run: |
           kubectl get svc ingress-nginx-controller -n ingress-nginx -o yaml \
             | sed 's/type: LoadBalancer/type: NodePort/' \
             | kubectl apply -f -
+
       # ---------------- METRICS SERVER ----------------
       - name: Install Metrics Server
         run: |
@@ -73,11 +87,13 @@ jobs:
           kubectl wait --namespace kube-system \
             --for=condition=available deployment metrics-server \
             --timeout=120s
+
       - name: Patch Metrics Server
         run: |
           kubectl -n kube-system patch deployment metrics-server --type='json' \
             -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]' || true
           kubectl -n kube-system rollout status deployment/metrics-server --timeout=120s || true
+
       # ---------------- MYSQL SECRET ----------------
       - name: Create MySQL Secret
         run: |
@@ -87,6 +103,7 @@ jobs:
             --from-literal=MYSQL_USER="${{ secrets.MYSQL_USER }}" \
             --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
             --from-literal=MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}"
+
       # ---------------- APPLY MANIFESTS ----------------
       - name: Deploy to Kubernetes
         run: |
@@ -101,10 +118,17 @@ jobs:
           kubectl apply -R -f k8s/hpa/
           kubectl apply -f k8s/ingress.yaml
           kubectl apply -R -f k8s/network_policies/
-          # --- Force redeploy app pods to pull latest images ---
-          kubectl rollout restart deployment expense-service
-          kubectl rollout restart deployment user-service
-          kubectl rollout restart deployment frontend
+
+      # ---------------- UPDATE DEPLOYMENTS WITH SHA IMAGES ----------------
+      - name: Update Deployments with SHA-tagged Images
+        run: |
+          kubectl set image deployment/expense-service expense-service=${{ needs.build.outputs.expense_image }}
+          kubectl set image deployment/user-service user-service=${{ needs.build.outputs.user_image }}
+          kubectl set image deployment/frontend frontend=${{ needs.build.outputs.frontend_image }}
+          kubectl rollout status deployment/expense-service
+          kubectl rollout status deployment/user-service
+          kubectl rollout status deployment/frontend
+
       # ---------------- VERIFY ----------------
       - name: Verify Deployment
         run: |
