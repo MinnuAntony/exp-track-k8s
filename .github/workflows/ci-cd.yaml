@@ -11,10 +11,6 @@ jobs:
   # ---------------- JOB 1: BUILD & PUSH IMAGES ----------------
   build:
     runs-on: self-hosted
-    outputs:
-      expense_image: ${{ steps.expense.outputs.image }}
-      user_image: ${{ steps.user.outputs.image }}
-      frontend_image: ${{ steps.frontend.outputs.image }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -26,31 +22,34 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build & Push Expense Service Image
-        id: expense
         run: |
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
           IMAGE="${{ secrets.DOCKER_USERNAME }}/expense-service:$SHORT_SHA"
           docker build -t $IMAGE ./expense-service
           docker push $IMAGE
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "EXPENSE_IMAGE=$IMAGE" >> $GITHUB_ENV
 
       - name: Build & Push User Service Image
-        id: user
         run: |
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
           IMAGE="${{ secrets.DOCKER_USERNAME }}/user-service:$SHORT_SHA"
           docker build -t $IMAGE ./user-service
           docker push $IMAGE
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "USER_IMAGE=$IMAGE" >> $GITHUB_ENV
 
       - name: Build & Push Frontend Image
-        id: frontend
         run: |
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
           IMAGE="${{ secrets.DOCKER_USERNAME }}/frontend:$SHORT_SHA"
           docker build -t $IMAGE ./frontend-new
           docker push $IMAGE
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "FRONTEND_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Debug - Print Built Images
+        run: |
+          echo "Expense Image: $EXPENSE_IMAGE"
+          echo "User Image: $USER_IMAGE"
+          echo "Frontend Image: $FRONTEND_IMAGE"
 
   # ---------------- JOB 2: DEPLOY TO KUBERNETES ----------------
   deploy:
@@ -60,13 +59,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # ---------------- DEBUG IMAGE OUTPUTS ----------------
-      - name: Debug Image Outputs
-        run: |
-          echo "Expense Image: ${{ needs.build.outputs.expense_image }}"
-          echo "User Image: ${{ needs.build.outputs.user_image }}"
-          echo "Frontend Image: ${{ needs.build.outputs.frontend_image }}"
-
       # ---------------- INGRESS CONTROLLER ----------------
       - name: Install NGINX Ingress Controller
         run: |
@@ -74,7 +66,6 @@ jobs:
           kubectl wait --namespace ingress-nginx \
             --for=condition=available deployment ingress-nginx-controller \
             --timeout=180s
-
       - name: Patch Ingress Controller Service to NodePort
         run: |
           kubectl get svc ingress-nginx-controller -n ingress-nginx -o yaml \
@@ -88,7 +79,6 @@ jobs:
           kubectl wait --namespace kube-system \
             --for=condition=available deployment metrics-server \
             --timeout=120s
-
       - name: Patch Metrics Server
         run: |
           kubectl -n kube-system patch deployment metrics-server --type='json' \
@@ -123,9 +113,9 @@ jobs:
       # ---------------- UPDATE DEPLOYMENTS WITH SHA IMAGES ----------------
       - name: Update Deployments with SHA-tagged Images
         run: |
-          kubectl set image deployment/expense-service expense-service=${{ needs.build.outputs.expense_image }}
-          kubectl set image deployment/user-service user-service=${{ needs.build.outputs.user_image }}
-          kubectl set image deployment/frontend frontend=${{ needs.build.outputs.frontend_image }}
+          kubectl set image deployment/expense-service expense-service=$EXPENSE_IMAGE
+          kubectl set image deployment/user-service user-service=$USER_IMAGE
+          kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE
           kubectl rollout status deployment/expense-service
           kubectl rollout status deployment/user-service
           kubectl rollout status deployment/frontend
