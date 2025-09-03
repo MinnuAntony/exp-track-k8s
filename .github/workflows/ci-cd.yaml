@@ -29,34 +29,28 @@ jobs:
         id: expense
         run: |
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          IMAGE="$DOCKER_USERNAME/expense-service:$SHORT_SHA"
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/expense-service:$SHORT_SHA"
           docker build -t $IMAGE ./expense-service
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
 
       - name: Build & Push User Service Image
         id: user
         run: |
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          IMAGE="$DOCKER_USERNAME/user-service:$SHORT_SHA"
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/user-service:$SHORT_SHA"
           docker build -t $IMAGE ./user-service
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
 
       - name: Build & Push Frontend Image
         id: frontend
         run: |
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          IMAGE="$DOCKER_USERNAME/frontend-new:$SHORT_SHA"
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/frontend-new:$SHORT_SHA"
           docker build -t $IMAGE ./frontend-new
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
 
   # ---------------- JOB 2: DEPLOY TO KUBERNETES ----------------
   deploy:
