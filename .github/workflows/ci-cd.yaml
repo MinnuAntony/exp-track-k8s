@@ -25,10 +25,14 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Get Git SHA
+        id: sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
       - name: Build and Push Expense Service Image
         id: expense
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/expense-service:latest
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/expense-service:${{ steps.sha.outputs.sha }}
           docker build -t $IMAGE ./expense-service
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
@@ -36,7 +40,7 @@ jobs:
       - name: Build and Push User Service Image
         id: user
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/user-service:latest
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/user-service:${{ steps.sha.outputs.sha }}
           docker build -t $IMAGE ./user-service
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
@@ -44,7 +48,7 @@ jobs:
       - name: Build and Push Frontend Image
         id: frontend
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/frontend-new:latest
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/frontend-new:${{ steps.sha.outputs.sha }}
           docker build -t $IMAGE ./frontend-new
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
@@ -95,25 +99,24 @@ jobs:
             --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
             --from-literal=MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}"
 
-      # ---------------- APPLY MANIFESTS ----------------
-      - name: Deploy to Kubernetes
+      # ---------------- UPDATE DEPLOYMENT MANIFESTS ----------------
+      - name: Update Deployment Images
+        run: |
+          kubectl set image deployment/expense-service expense-service=${{ steps.expense.outputs.image }}
+          kubectl set image deployment/user-service user-service=${{ steps.user.outputs.image }}
+          kubectl set image deployment/frontend frontend=${{ steps.frontend.outputs.image }}
+
+      # ---------------- APPLY OTHER MANIFESTS ----------------
+      - name: Apply Remaining Manifests
         run: |
           kubectl apply -f k8s/mysql-configmap.yaml
           kubectl apply -f k8s/mysql-pv.yaml
           kubectl apply -f k8s/mysql-pvc.yaml
           kubectl apply -f k8s/mysql-statefulset.yaml
           kubectl apply -f k8s/mysql-service.yaml
-          kubectl apply -f k8s/expense-service.yaml
-          kubectl apply -f k8s/user-service.yaml
-          kubectl apply -f k8s/frontend.yaml
           kubectl apply -R -f k8s/hpa/
           kubectl apply -f k8s/ingress.yaml
           kubectl apply -R -f k8s/network_policies/
-
-          # --- Force redeploy app pods to pull latest images ---
-          kubectl rollout restart deployment expense-service
-          kubectl rollout restart deployment user-service
-          kubectl rollout restart deployment frontend
 
       # ---------------- VERIFY ----------------
       - name: Verify Deployment
