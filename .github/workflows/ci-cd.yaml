@@ -12,9 +12,9 @@ jobs:
   build:
     runs-on: self-hosted
     outputs:
-      expense_image: ${{ steps.expense.outputs.image }}
-      user_image: ${{ steps.user.outputs.image }}
-      frontend_image: ${{ steps.frontend.outputs.image }}
+      expense_image: ${{ steps.expense.outputs.expense_image }}
+      user_image: ${{ steps.user.outputs.user_image }}
+      frontend_image: ${{ steps.frontend.outputs.frontend_image }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -36,7 +36,7 @@ jobs:
           echo "Building Expense Service Image: $IMAGE"
           docker build -t "$IMAGE" ./expense-service
           docker push "$IMAGE"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "expense_image=$IMAGE" >> $GITHUB_OUTPUT
 
       - name: Build and Push User Service Image
         id: user
@@ -45,7 +45,7 @@ jobs:
           echo "Building User Service Image: $IMAGE"
           docker build -t "$IMAGE" ./user-service
           docker push "$IMAGE"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "user_image=$IMAGE" >> $GITHUB_OUTPUT
 
       - name: Build and Push Frontend Image
         id: frontend
@@ -54,7 +54,7 @@ jobs:
           echo "Building Frontend Image: $IMAGE"
           docker build -t "$IMAGE" ./frontend-new
           docker push "$IMAGE"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "frontend_image=$IMAGE" >> $GITHUB_OUTPUT
 
   # ---------------- JOB 2: DEPLOY TO KUBERNETES ----------------
   deploy:
@@ -64,7 +64,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-  
       # ---------------- INGRESS CONTROLLER ----------------
       - name: Install NGINX Ingress Controller
         run: |
