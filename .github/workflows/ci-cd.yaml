@@ -48,7 +48,7 @@ jobs:
         run: |
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
           IMAGE="${{ secrets.DOCKER_USERNAME }}/frontend:$SHORT_SHA"
-          docker build -t $IMAGE ./frontend
+          docker build -t $IMAGE ./frontend-new
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
