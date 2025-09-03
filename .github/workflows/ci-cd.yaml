@@ -1,0 +1,99 @@
+name: CI-CD to Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # ---------------- DOCKER BUILD AND PUSH ----------------
+      - name: Log in to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Expense Service Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/expense-service:latest ./expense-service
+          docker push ${{ secrets.DOCKER_USERNAME }}/expense-service:latest
+
+      - name: Build and Push User Service Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/user-service:latest ./user-service
+          docker push ${{ secrets.DOCKER_USERNAME }}/user-service:latest
+
+      - name: Build and Push Frontend Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/frontend-new:latest ./frontend-new
+          docker push ${{ secrets.DOCKER_USERNAME }}/frontend-new:latest
+
+            # ---------------- INGRESS CONTROLLER ----------------
+      - name: Install NGINX Ingress Controller
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=available deployment ingress-nginx-controller \
+            --timeout=180s
+
+      - name: Patch Ingress Controller Service to NodePort
+        run: |
+          echo "Patching ingress-nginx-controller to NodePort..."
+          kubectl get svc ingress-nginx-controller -n ingress-nginx -o yaml \
+            | sed 's/type: LoadBalancer/type: NodePort/' \
+            | kubectl apply -f -
+
+      # ---------------- METRICS SERVER ----------------
+      - name: Install Metrics Server
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+          kubectl wait --namespace kube-system \
+            --for=condition=available deployment metrics-server \
+            --timeout=120s
+
+      - name: Patch Metrics Server (append --kubelet-insecure-tls)
+        run: |
+          kubectl -n kube-system patch deployment metrics-server --type='json' \
+            -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]' || true
+          kubectl -n kube-system rollout status deployment/metrics-server --timeout=120s || true
+
+      # ---------------- MYSQL SECRET ----------------
+      - name: Create MySQL Secret
+        run: |
+          kubectl delete secret mysql-secret --ignore-not-found
+          kubectl create secret generic mysql-secret \
+            --from-literal=MYSQL_ROOT_PASSWORD="${{ secrets.MYSQL_ROOT_PASSWORD }}" \
+            --from-literal=MYSQL_USER="${{ secrets.MYSQL_USER }}" \
+            --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
+            --from-literal=MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}"
+
+      # ---------------- APPLY MANIFESTS IN ORDER ----------------
+      - name: Deploy to Kubernetes
+        run: |
+          echo "Applying manifests in correct order..."
+          kubectl apply -f k8s/mysql-configmap.yaml
+          kubectl apply -f k8s/mysql-pv.yaml
+          kubectl apply -f k8s/mysql-pvc.yaml
+          kubectl apply -f k8s/mysql-statefulset.yaml
+          kubectl apply -f k8s/mysql-service.yaml
+          kubectl apply -f k8s/expense-service.yaml
+          kubectl apply -f k8s/user-service.yaml
+          kubectl apply -f k8s/frontend.yaml
+          kubectl apply -R -f k8s/hpa/
+          kubectl apply -f k8s/ingress.yaml
+          kubectl apply -R -f k8s/network_policies/
+
+      # ---------------- VERIFY ----------------
+      - name: Verify Deployment
+        run: |
+          kubectl get pods -o wide
+          kubectl get svc -o wide
+          kubectl get ingress
+
