@@ -1,83 +1,51 @@
 name: CI-CD to Kubernetes
+
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+
 jobs:
+
   # ---------------- JOB 1: BUILD & PUSH IMAGES ----------------
   build:
     runs-on: self-hosted
     outputs:
-      expense_image: ${{ steps.expense.outputs.expense_image }}
-      user_image: ${{ steps.user.outputs.user_image }}
-      frontend_image: ${{ steps.frontend.outputs.frontend_image }}
+      expense_image: ${{ steps.expense.outputs.image }}
+      user_image: ${{ steps.user.outputs.image }}
+      frontend_image: ${{ steps.frontend.outputs.image }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
       - name: Log in to DockerHub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Get Git SHA
-        id: sha
-        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      # ---- Build & Push Expense Service ----
-      - name: Build Expense Service Image
-        id: expense-build
-        run: |
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/expense-service:${{ steps.sha.outputs.sha }}"
-          echo "Building Expense Service Image: $IMAGE"
-          docker build -t "$IMAGE" ./expense-service
-      - name: Push Expense Service Image
-        id: expense-push
-        run: |
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/expense-service:${{ steps.sha.outputs.sha }}"
-          echo "Pushing Expense Service Image: $IMAGE"
-          docker push "$IMAGE"
-      - name: Set Expense Service Output
+      - name: Build and Push Expense Service Image
         id: expense
-        if: success()
-        run: echo "expense_image=${{ secrets.DOCKER_USERNAME }}/expense-service:${{ steps.sha.outputs.sha }}" >> $GITHUB_OUTPUT
-
-      # ---- Build & Push User Service ----
-      - name: Build User Service Image
-        id: user-build
         run: |
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/user-service:${{ steps.sha.outputs.sha }}"
-          echo "Building User Service Image: $IMAGE"
-          docker build -t "$IMAGE" ./user-service
-      - name: Push User Service Image
-        id: user-push
-        run: |
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/user-service:${{ steps.sha.outputs.sha }}"
-          echo "Pushing User Service Image: $IMAGE"
-          docker push "$IMAGE"
-      - name: Set User Service Output
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/expense-service:latest
+          docker build -t $IMAGE ./expense-service
+          docker push $IMAGE
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+      - name: Build and Push User Service Image
         id: user
-        if: success()
-        run: echo "user_image=${{ secrets.DOCKER_USERNAME }}/user-service:${{ steps.sha.outputs.sha }}" >> $GITHUB_OUTPUT
-
-      # ---- Build & Push Frontend ----
-      - name: Build Frontend Image
-        id: frontend-build
         run: |
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/frontend-new:${{ steps.sha.outputs.sha }}"
-          echo "Building Frontend Image: $IMAGE"
-          docker build -t "$IMAGE" ./frontend-new
-      - name: Push Frontend Image
-        id: frontend-push
-        run: |
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/frontend-new:${{ steps.sha.outputs.sha }}"
-          echo "Pushing Frontend Image: $IMAGE"
-          docker push "$IMAGE"
-      - name: Set Frontend Output
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/user-service:latest
+          docker build -t $IMAGE ./user-service
+          docker push $IMAGE
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+      - name: Build and Push Frontend Image
         id: frontend
-        if: success()
-        run: echo "frontend_image=${{ secrets.DOCKER_USERNAME }}/frontend-new:${{ steps.sha.outputs.sha }}" >> $GITHUB_OUTPUT
-
+        run: |
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/frontend-new:latest
+          docker build -t $IMAGE ./frontend-new
+          docker push $IMAGE
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
   # ---------------- JOB 2: DEPLOY TO KUBERNETES ----------------
   deploy:
     runs-on: self-hosted
@@ -85,6 +53,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
       # ---------------- INGRESS CONTROLLER ----------------
       - name: Install NGINX Ingress Controller
         run: |
@@ -118,54 +87,27 @@ jobs:
             --from-literal=MYSQL_USER="${{ secrets.MYSQL_USER }}" \
             --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
             --from-literal=MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}"
-      # ---------------- UPDATE DEPLOYMENT IMAGES ----------------
-      - name: Update Deployment Images
-        run: |
-          echo "Updating deployments with new images..."
-          # Use shell variables to ensure correct interpolation
-          EXPENSE_IMAGE="${{ needs.build.outputs.expense_image }}"
-          USER_IMAGE="${{ needs.build.outputs.user_image }}"
-          FRONTEND_IMAGE="${{ needs.build.outputs.frontend_image }}"
-          
-          echo "Expense Service Image: $EXPENSE_IMAGE"
-          echo "User Service Image: $USER_IMAGE"
-          echo "Frontend Image: $FRONTEND_IMAGE"
-          
-          # Check if variables are empty before running kubectl commands
-          if [ -n "$EXPENSE_IMAGE" ]; then
-            kubectl set image deployment/expense-service expense-service="$EXPENSE_IMAGE"
-          else
-            echo "Error: Expense Service image name is empty. Skipping deployment."
-            exit 1
-          fi
-          
-          if [ -n "$USER_IMAGE" ]; then
-            kubectl set image deployment/user-service user-service="$USER_IMAGE"
-          else
-            echo "Error: User Service image name is empty. Skipping deployment."
-            exit 1
-          fi
-          
-          if [ -n "$FRONTEND_IMAGE" ]; then
-            kubectl set image deployment/frontend frontend="$FRONTEND_IMAGE"
-          else
-            echo "Error: Frontend image name is empty. Skipping deployment."
-            exit 1
-          fi
-      # ---------------- APPLY OTHER MANIFESTS ----------------
-      - name: Apply Remaining Manifests
+      # ---------------- APPLY MANIFESTS ----------------
+      - name: Deploy to Kubernetes
         run: |
           kubectl apply -f k8s/mysql-configmap.yaml
           kubectl apply -f k8s/mysql-pv.yaml
           kubectl apply -f k8s/mysql-pvc.yaml
           kubectl apply -f k8s/mysql-statefulset.yaml
           kubectl apply -f k8s/mysql-service.yaml
+          kubectl apply -f k8s/expense-service.yaml
+          kubectl apply -f k8s/user-service.yaml
+          kubectl apply -f k8s/frontend.yaml
           kubectl apply -R -f k8s/hpa/
           kubectl apply -f k8s/ingress.yaml
           kubectl apply -R -f k8s/network_policies/
+          # --- Force redeploy app pods to pull latest images ---
+          kubectl rollout restart deployment expense-service
+          kubectl rollout restart deployment user-service
+          kubectl rollout restart deployment frontend
       # ---------------- VERIFY ----------------
       - name: Verify Deployment
         run: |
           kubectl get pods -o wide
           kubectl get svc -o wide
-          kubectl get ingress -o wide
+          kubectl get ingress
