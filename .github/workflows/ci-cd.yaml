@@ -23,30 +23,60 @@ jobs:
       - name: Get Git SHA
         id: sha
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      - name: Build and Push Expense Service Image
-        id: expense
+
+      # ---- Build & Push Expense Service ----
+      - name: Build Expense Service Image
+        id: expense-build
         run: |
           IMAGE="${{ secrets.DOCKER_USERNAME }}/expense-service:${{ steps.sha.outputs.sha }}"
           echo "Building Expense Service Image: $IMAGE"
           docker build -t "$IMAGE" ./expense-service
+      - name: Push Expense Service Image
+        id: expense-push
+        run: |
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/expense-service:${{ steps.sha.outputs.sha }}"
+          echo "Pushing Expense Service Image: $IMAGE"
           docker push "$IMAGE"
-          echo "expense_image=$IMAGE" >> $GITHUB_OUTPUT
-      - name: Build and Push User Service Image
-        id: user
+      - name: Set Expense Service Output
+        id: expense
+        if: success()
+        run: echo "expense_image=${{ secrets.DOCKER_USERNAME }}/expense-service:${{ steps.sha.outputs.sha }}" >> $GITHUB_OUTPUT
+
+      # ---- Build & Push User Service ----
+      - name: Build User Service Image
+        id: user-build
         run: |
           IMAGE="${{ secrets.DOCKER_USERNAME }}/user-service:${{ steps.sha.outputs.sha }}"
           echo "Building User Service Image: $IMAGE"
           docker build -t "$IMAGE" ./user-service
+      - name: Push User Service Image
+        id: user-push
+        run: |
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/user-service:${{ steps.sha.outputs.sha }}"
+          echo "Pushing User Service Image: $IMAGE"
           docker push "$IMAGE"
-          echo "user_image=$IMAGE" >> $GITHUB_OUTPUT
-      - name: Build and Push Frontend Image
-        id: frontend
+      - name: Set User Service Output
+        id: user
+        if: success()
+        run: echo "user_image=${{ secrets.DOCKER_USERNAME }}/user-service:${{ steps.sha.outputs.sha }}" >> $GITHUB_OUTPUT
+
+      # ---- Build & Push Frontend ----
+      - name: Build Frontend Image
+        id: frontend-build
         run: |
           IMAGE="${{ secrets.DOCKER_USERNAME }}/frontend-new:${{ steps.sha.outputs.sha }}"
           echo "Building Frontend Image: $IMAGE"
           docker build -t "$IMAGE" ./frontend-new
+      - name: Push Frontend Image
+        id: frontend-push
+        run: |
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/frontend-new:${{ steps.sha.outputs.sha }}"
+          echo "Pushing Frontend Image: $IMAGE"
           docker push "$IMAGE"
-          echo "frontend_image=$IMAGE" >> $GITHUB_OUTPUT
+      - name: Set Frontend Output
+        id: frontend
+        if: success()
+        run: echo "frontend_image=${{ secrets.DOCKER_USERNAME }}/frontend-new:${{ steps.sha.outputs.sha }}" >> $GITHUB_OUTPUT
 
   # ---------------- JOB 2: DEPLOY TO KUBERNETES ----------------
   deploy:
