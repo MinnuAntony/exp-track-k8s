@@ -64,13 +64,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # ---------------- DEBUG STEP ----------------
-      - name: Debug: Show Built Images
-        run: |
-          echo "Expense Service Image: ${{ needs.build.outputs.expense_image }}"
-          echo "User Service Image: ${{ needs.build.outputs.user_image }}"
-          echo "Frontend Image: ${{ needs.build.outputs.frontend_image }}"
-
+  
       # ---------------- INGRESS CONTROLLER ----------------
       - name: Install NGINX Ingress Controller
         run: |
