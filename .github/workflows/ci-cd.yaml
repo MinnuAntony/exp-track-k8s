@@ -110,6 +110,11 @@ jobs:
           kubectl apply -f k8s/ingress.yaml
           kubectl apply -R -f k8s/network_policies/
 
+          # --- Force redeploy app pods to pull latest images ---
+          kubectl rollout restart deployment expense-service
+          kubectl rollout restart deployment user-service
+          kubectl rollout restart deployment frontend
+
       # ---------------- VERIFY ----------------
       - name: Verify Deployment
         run: |
