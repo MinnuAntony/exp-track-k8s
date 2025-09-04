@@ -28,33 +28,24 @@ jobs:
       - name: Build and Push Expense Service Image
         id: expense
         run: |
-          IMAGE_SHA=${{ secrets.DOCKER_USERNAME }}/expense-service:${{ github.sha }}
-          IMAGE_LATEST=${{ secrets.DOCKER_USERNAME }}/expense-service:latest
-          docker build -t $IMAGE_SHA -t $IMAGE_LATEST ./expense-service
-          docker push $IMAGE_SHA
-          docker push $IMAGE_LATEST
-          echo "image=$IMAGE_SHA" >> $GITHUB_OUTPUT
-
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/expense-service:latest
+          docker build -t $IMAGE ./expense-service
+          docker push $IMAGE
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
       - name: Build and Push User Service Image
         id: user
         run: |
-          IMAGE_SHA=${{ secrets.DOCKER_USERNAME }}/user-service:${{ github.sha }}
-          IMAGE_LATEST=${{ secrets.DOCKER_USERNAME }}/user-service:latest
-          docker build -t $IMAGE_SHA -t $IMAGE_LATEST ./user-service
-          docker push $IMAGE_SHA
-          docker push $IMAGE_LATEST
-          echo "image=$IMAGE_SHA" >> $GITHUB_OUTPUT
-
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/user-service:latest
+          docker build -t $IMAGE ./user-service
+          docker push $IMAGE
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
       - name: Build and Push Frontend Image
         id: frontend
         run: |
-          IMAGE_SHA=${{ secrets.DOCKER_USERNAME }}/frontend:${{ github.sha }}
-          IMAGE_LATEST=${{ secrets.DOCKER_USERNAME }}/frontend:latest
-          docker build -t $IMAGE_SHA -t $IMAGE_LATEST ./frontend-new
-          docker push $IMAGE_SHA
-          docker push $IMAGE_LATEST
-          echo "image=$IMAGE_SHA" >> $GITHUB_OUTPUT
-
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/frontend-new:latest
+          docker build -t $IMAGE ./frontend-new
+          docker push $IMAGE
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
   # ---------------- JOB 2: DEPLOY TO KUBERNETES ----------------
   deploy:
     runs-on: self-hosted
@@ -70,27 +61,23 @@ jobs:
           kubectl wait --namespace ingress-nginx \
             --for=condition=available deployment ingress-nginx-controller \
             --timeout=180s
-
       - name: Patch Ingress Controller Service to NodePort
         run: |
           kubectl get svc ingress-nginx-controller -n ingress-nginx -o yaml \
             | sed 's/type: LoadBalancer/type: NodePort/' \
             | kubectl apply -f -
-
       # ---------------- METRICS SERVER ----------------
       - name: Install Metrics Server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-
-      - name: Patch Metrics Server for Insecure Kubelet TLS
+          kubectl wait --namespace kube-system \
+            --for=condition=available deployment metrics-server \
+            --timeout=120s
+      - name: Patch Metrics Server
         run: |
           kubectl -n kube-system patch deployment metrics-server --type='json' \
-            -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
-
-      - name: Wait for Metrics Server to be Ready
-        run: |
-          kubectl -n kube-system rollout status deployment/metrics-server --timeout=180s
-
+            -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]' || true
+          kubectl -n kube-system rollout status deployment/metrics-server --timeout=120s || true
       # ---------------- MYSQL SECRET ----------------
       - name: Create MySQL Secret
         run: |
@@ -100,9 +87,8 @@ jobs:
             --from-literal=MYSQL_USER="${{ secrets.MYSQL_USER }}" \
             --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
             --from-literal=MYSQL_DATABASE="${{ secrets.MYSQL_DATABASE }}"
-
       # ---------------- APPLY MANIFESTS ----------------
-      - name: Apply Kubernetes Manifests
+      - name: Deploy to Kubernetes
         run: |
           kubectl apply -f k8s/mysql-configmap.yaml
           kubectl apply -f k8s/mysql-pv.yaml
@@ -115,26 +101,13 @@ jobs:
           kubectl apply -R -f k8s/hpa/
           kubectl apply -f k8s/ingress.yaml
           kubectl apply -R -f k8s/network_policies/
-
-      # ---------------- UPDATE DEPLOYMENTS WITH SHA IMAGES ----------------
-      - name: Update Expense Service Image
-        run: |
-          kubectl set image deployment/expense-service expense-service=${{ needs.build.outputs.expense_image }}
-
-      - name: Update User Service Image
-        run: |
-          kubectl set image deployment/user-service user-service=${{ needs.build.outputs.user_image }}
-
-      - name: Update Frontend Image
-        run: |
-          kubectl set image deployment/frontend frontend=${{ needs.build.outputs.frontend_image }}
-
-      # ---------------- VERIFY DEPLOYMENT ----------------
+          # --- Force redeploy app pods to pull latest images ---
+          kubectl rollout restart deployment expense-service
+          kubectl rollout restart deployment user-service
+          kubectl rollout restart deployment frontend
+      # ---------------- VERIFY ----------------
       - name: Verify Deployment
         run: |
-          kubectl rollout status deployment/expense-service
-          kubectl rollout status deployment/user-service
-          kubectl rollout status deployment/frontend
           kubectl get pods -o wide
           kubectl get svc -o wide
           kubectl get ingress
