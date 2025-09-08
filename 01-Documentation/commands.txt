@@ -1,14 +1,13 @@
 
-9o893Jx25UOyoI26 argo
 ssh-keygen -t ed25519 -C "minnu.antony05@gmail.com"
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
 cat ~/.ssh/id_ed25519.pub
 ssh -T git@github.com '
-3.87.182.69
-ssh -i "minnunv.pem" ubuntu@ec2-3-87-182-69.compute-1.amazonaws.com
+
 sudo usermod -aG docker $USER
 newgrp docker
+
 FROM python:3.11-slim
 WORKDIR /app
 COPY requirements.txt .
@@ -23,12 +22,15 @@ USER appuser
 CMD ["python", "-m", "app.main"]
 https://chatgpt.com/share/68b2b4a2-9310-800d-a689-dadfc4328eda
 - reverse proxy thing
+
 .env:
 MYSQL_ROOT_PASSWORD=rootpassword
 MYSQL_DATABASE=micro_db
 MYSQL_USER=micro_user
 MYSQL_PASSWORD=secret
+
 cat mysql-secret.yaml
+
 apiVersion: v1
 kind: Secret
 metadata:
@@ -39,8 +41,8 @@ MYSQL_ROOT_PASSWORD: rootpassword # <-- change if needed
 MYSQL_DATABASE: micro_db # <-- change if needed
 MYSQL_USER: micro_user # <-- change if needed
 MYSQL_PASSWORD: secret # <-- change if needed
-52.87.239.57
-ssh -i "minnunv.pem" ubuntu@ec2-52-87-239-57.compute-1.amazonaws.com
+
+
 —---------------------------------------------------sep2—----------------------
 Option 1 (Most Basic / Only DB Protection)
 👉 Just apply the MySQL policy. Everything else stays open, but DB is safe.
@@ -48,6 +50,8 @@ git clone https://github.com/exp-tracker-org/frontend-new
 git clone https://github.com/exp-tracker-org/expense-service
 git clone https://github.com/exp-tracker-org/user-service
 git clone https://github.com/exp-tracker-org/infra
+
+
 # Download the latest version
 curl -sSL -o argocd
 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
@@ -67,6 +71,8 @@ argocd repo add https://github.com/exp-tracker-org/user-service.git --username m
 --password 
 argocd repo add https://github.com/exp-tracker-org/expense-service.git --username minnuantony
 --password 
+
+
 kubectl create secret generic github-org-secrets \
  --from-literal=MYSQL_ROOT_PASSWORD=rootpassword \
  --from-literal=MYSQL_DATABASE=micro_db \
